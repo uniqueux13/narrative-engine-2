@@ -114,8 +114,18 @@ const Studio: React.FC = () => {
   const handleManifest = async () => {
     saveTranscript();
     if (!projectId) return;
-    // Pass the actual clips to the forge
-    await manifestProject(projectId, project.clips, (status, url) => {
+
+    // IMPORTANT: Get clips in the correct ORDER defined by the recipe
+    const orderedClips = recipe.slots
+      .map(slot => project.clips[slot.id])
+      .filter(clip => clip !== undefined);
+
+    if (orderedClips.length !== recipe.slots.length) {
+      console.warn("Manifesting with incomplete clips");
+    }
+
+    // Pass the ordered array to the forge for stitching
+    await manifestProject(projectId, orderedClips, (status, url) => {
       updateProjectStatus(projectId, status, url);
       if (status === ProjectStatus.COMPLETED) {
         setShowManifestSuccess(true);
@@ -125,10 +135,19 @@ const Studio: React.FC = () => {
   };
 
   const handleDownload = () => {
+    // If we have a stitched master output, download that
+    if (project.outputUrl) {
+      const a = document.createElement('a');
+      a.href = project.outputUrl;
+      a.download = `Grimwire_${project.title.replace(/\s+/g, '_')}_MASTER.webm`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // Fallback: Download individual clip
     if (playbackSequence.length === 0) return;
-    
-    // In a real engine, we download the merged file. 
-    // Here we download the current playback clip (or the first one) to prove the pipeline works.
     const itemToDownload = playbackSequence[playbackIndex] || playbackSequence[0]; 
     const a = document.createElement('a');
     a.href = itemToDownload.clip.blobUrl;
@@ -161,6 +180,8 @@ const Studio: React.FC = () => {
              <div className="relative aspect-[9/16] w-64 mx-auto bg-black rounded-xl overflow-hidden ring-1 ring-zinc-800 shadow-2xl group">
                 <video 
                   ref={videoPlayerRef}
+                  // If we have a master URL, we could play that instead, but playing individual clips allows for the interactive 'next' logic in UI.
+                  // For the user preview, we stick to the sequential logic. 
                   src={currentItem.clip.blobUrl} 
                   controls={false}
                   className="w-full h-full object-cover" 
@@ -217,7 +238,8 @@ const Studio: React.FC = () => {
                 onClick={handleDownload}
                 className="flex-1 py-3 px-4 rounded-lg bg-emerald-500 text-zinc-950 font-bold hover:bg-emerald-400 flex items-center justify-center gap-2 transition-transform hover:scale-105"
              >
-               <Download className="w-4 h-4" /> Download
+               <Download className="w-4 h-4" /> 
+               {project.outputUrl ? 'Download Full Video' : 'Download Clip'}
              </button>
            </div>
            
@@ -237,6 +259,7 @@ const Studio: React.FC = () => {
         <div className="text-center">
           <h2 className="text-xl font-bold text-white mb-1">The Forge is Active</h2>
           <p className="text-zinc-500 font-mono text-sm">Status: {project.status}</p>
+          <p className="text-zinc-600 text-xs mt-2">Stitching clips into single timeline...</p>
         </div>
       </div>
     );
