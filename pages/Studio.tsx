@@ -4,7 +4,7 @@ import { useProjects } from '../services/projectContext';
 import { generateScriptForSlot } from '../services/geminiService';
 import { manifestProject } from '../services/mockForge';
 import CameraRecorder from '../components/CameraRecorder';
-import { ChevronLeft, BrainCircuit, Wand2, ChevronRight, PlayCircle, Loader, ArrowRight, Download, Check, RotateCcw } from 'lucide-react';
+import { ChevronLeft, BrainCircuit, Wand2, ChevronRight, PlayCircle, Loader, ArrowRight, Download, Check, RotateCcw, Captions } from 'lucide-react';
 import { ProjectStatus } from '../types';
 
 const Studio: React.FC = () => {
@@ -38,7 +38,10 @@ const Studio: React.FC = () => {
   // Autoplay sequence logic for the result view
   useEffect(() => {
     if ((showManifestSuccess || project?.status === ProjectStatus.COMPLETED) && videoPlayerRef.current) {
-        videoPlayerRef.current.play().catch(e => console.log("Autoplay blocked", e));
+        // Small delay to ensure DOM is ready and transition feels natural
+        setTimeout(() => {
+            videoPlayerRef.current?.play().catch(e => console.log("Autoplay blocked", e));
+        }, 500);
     }
   }, [playbackIndex, showManifestSuccess, project?.status]);
 
@@ -48,17 +51,21 @@ const Studio: React.FC = () => {
   const isCompleted = project.status === ProjectStatus.COMPLETED;
   const isProcessing = project.status === ProjectStatus.UPLOADING || project.status === ProjectStatus.PROCESSING;
 
-  // Derive sorted clips based on recipe order for the final playback
-  const sortedClips = recipe.slots
-    .map(slot => project.clips[slot.id])
-    .filter(Boolean);
+  // Create a structured sequence for playback that pairs Slots with their Clips
+  const playbackSequence = recipe.slots
+    .filter(slot => project.clips[slot.id])
+    .map(slot => ({
+      slot,
+      clip: project.clips[slot.id]
+    }));
 
-  const handleCapture = (blob: Blob) => {
+  const handleCapture = (blob: Blob, transcript: string) => {
     addClip(project.id, {
       slotId: currentSlot.id,
       blob,
       blobUrl: URL.createObjectURL(blob),
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      transcript
     });
   };
 
@@ -94,14 +101,14 @@ const Studio: React.FC = () => {
   };
 
   const handleDownload = () => {
-    if (sortedClips.length === 0) return;
+    if (playbackSequence.length === 0) return;
     
     // In a real engine, we download the merged file. 
-    // Here we download the first clip or the current playing clip as a demo.
-    const clipToDownload = sortedClips[0]; 
+    // Here we download the current playback clip (or the first one) to prove the pipeline works.
+    const itemToDownload = playbackSequence[playbackIndex] || playbackSequence[0]; 
     const a = document.createElement('a');
-    a.href = clipToDownload.blobUrl;
-    a.download = `Grimwire_${project.title.replace(/\s+/g, '_')}_Manifest.mp4`;
+    a.href = itemToDownload.clip.blobUrl;
+    a.download = `Grimwire_${project.title.replace(/\s+/g, '_')}_${itemToDownload.slot.name}.mp4`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -111,12 +118,12 @@ const Studio: React.FC = () => {
 
   // If the project is already done, show the result view
   if (isCompleted || showManifestSuccess) {
-    const currentPlaybackClip = sortedClips[playbackIndex];
+    const currentItem = playbackSequence[playbackIndex];
 
     return (
       <div className="h-screen flex flex-col items-center justify-center p-6 bg-zinc-950 text-center">
         <div className="max-w-md w-full space-y-8">
-           <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto ring-1 ring-emerald-500/50">
+           <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto ring-1 ring-emerald-500/50 animate-in zoom-in duration-300">
              <Check className="w-10 h-10 text-emerald-500" />
            </div>
            
@@ -126,15 +133,17 @@ const Studio: React.FC = () => {
            </div>
 
            {/* Sequential Player */}
-           {currentPlaybackClip && (
-             <div className="relative aspect-[9/16] w-64 mx-auto bg-black rounded-xl overflow-hidden ring-1 ring-zinc-800 shadow-2xl">
+           {currentItem && (
+             <div className="relative aspect-[9/16] w-64 mx-auto bg-black rounded-xl overflow-hidden ring-1 ring-zinc-800 shadow-2xl group">
                 <video 
                   ref={videoPlayerRef}
-                  src={currentPlaybackClip.blobUrl} 
+                  src={currentItem.clip.blobUrl} 
                   controls={false}
                   className="w-full h-full object-cover" 
+                  muted={false}
+                  playsInline
                   onEnded={() => {
-                    if (playbackIndex < sortedClips.length - 1) {
+                    if (playbackIndex < playbackSequence.length - 1) {
                         setPlaybackIndex(prev => prev + 1);
                     } else {
                         // Loop back to start after a delay
@@ -142,8 +151,33 @@ const Studio: React.FC = () => {
                     }
                   }}
                 />
-                <div className="absolute top-2 right-2 bg-black/60 px-2 py-1 rounded-md text-xs font-mono text-white/80 pointer-events-none">
-                    CLIP {playbackIndex + 1}/{sortedClips.length}
+                
+                {/* Subtitle Overlay */}
+                {currentItem.slot.hasSubtitles && (
+                  <div className="absolute bottom-12 left-2 right-2 flex flex-col items-center pointer-events-none transition-opacity duration-300">
+                    <span className="inline-block px-3 py-2 bg-black/70 backdrop-blur-sm rounded-lg text-white font-bold text-sm text-center shadow-xl border border-white/10 animate-in slide-in-from-bottom-2 fade-in">
+                      {/* Use actual transcript if available, fallback to description */}
+                      {currentItem.clip.transcript || currentItem.slot.description}
+                    </span>
+                  </div>
+                )}
+
+                {/* Progress Indicators */}
+                <div className="absolute top-2 left-2 right-2 flex gap-1 z-20">
+                  {playbackSequence.map((_, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`h-1 flex-1 rounded-full transition-colors ${
+                        idx === playbackIndex ? 'bg-white' : idx < playbackIndex ? 'bg-white/50' : 'bg-white/10'
+                      }`} 
+                    />
+                  ))}
+                </div>
+                
+                {/* Info Pills */}
+                <div className="absolute bottom-2 right-2 bg-black/60 px-2 py-1 rounded-md text-[10px] font-mono text-white/80 pointer-events-none backdrop-blur-md z-20 flex items-center gap-2">
+                    {currentItem.slot.hasSubtitles && <Captions className="w-3 h-3 text-amber-400" />}
+                    <span>{playbackIndex + 1}/{playbackSequence.length}</span>
                 </div>
              </div>
            )}
@@ -157,7 +191,7 @@ const Studio: React.FC = () => {
              </button>
              <button 
                 onClick={handleDownload}
-                className="flex-1 py-3 px-4 rounded-lg bg-emerald-500 text-zinc-950 font-bold hover:bg-emerald-400 flex items-center justify-center gap-2"
+                className="flex-1 py-3 px-4 rounded-lg bg-emerald-500 text-zinc-950 font-bold hover:bg-emerald-400 flex items-center justify-center gap-2 transition-transform hover:scale-105"
              >
                <Download className="w-4 h-4" /> Download
              </button>
@@ -227,7 +261,10 @@ const Studio: React.FC = () => {
                   {idx + 1}
                 </div>
                 <div className="min-w-0">
-                  <p className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-zinc-400'}`}>{slot.name}</p>
+                  <div className="flex items-center gap-2">
+                     <p className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-zinc-400'}`}>{slot.name}</p>
+                     {slot.hasSubtitles && <Captions className="w-3 h-3 text-zinc-600" />}
+                  </div>
                   <p className="text-xs text-zinc-600 truncate">{slot.durationHint}</p>
                 </div>
               </button>
@@ -256,7 +293,14 @@ const Studio: React.FC = () => {
         <div className="absolute top-0 left-0 right-0 z-10 p-6 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
           <div className="flex justify-between items-start pointer-events-auto">
              <div>
-               <h3 className="text-2xl font-bold text-white drop-shadow-md">{currentSlot.name}</h3>
+               <div className="flex items-center gap-3">
+                 <h3 className="text-2xl font-bold text-white drop-shadow-md">{currentSlot.name}</h3>
+                 {currentSlot.hasSubtitles && (
+                   <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-amber-500 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md">
+                     Subtitles On
+                   </span>
+                 )}
+               </div>
                <p className="text-zinc-300 text-sm max-w-md drop-shadow-md mt-1">{currentSlot.description}</p>
              </div>
              

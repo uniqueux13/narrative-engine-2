@@ -21,7 +21,7 @@ export const manifestProject = async (
   // 3. Completed
   // In a real backend, we would return the merged URL.
   // For this local prototype, we return the URL of the first clip to ensure 
-  // the data flow uses user-generated content, or a valid blob URL.
+  // the data flow uses user-generated content.
   // The frontend will handle sequential playback of all clips.
   const clipsArray = Object.values(clips);
   const resultUrl = clipsArray.length > 0 ? clipsArray[0].blobUrl : "";

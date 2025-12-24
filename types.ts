@@ -4,6 +4,7 @@ export interface Slot {
   description: string;
   durationHint?: string;
   requiredAspectRatio?: '9:16' | '16:9';
+  hasSubtitles?: boolean;
 }
 
 export interface Recipe {
@@ -26,6 +27,7 @@ export interface Clip {
   blobUrl: string;
   blob: Blob;
   timestamp: number;
+  transcript?: string;
 }
 
 export interface Project {

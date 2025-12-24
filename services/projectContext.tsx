@@ -4,12 +4,15 @@ import { MASTER_RECIPES } from '../constants';
 
 interface ProjectContextType {
   projects: Project[];
+  customRecipes: Recipe[];
   createProject: (recipeId: string, title: string) => string;
+  saveCustomRecipe: (recipe: Recipe) => void;
   getProject: (id: string) => Project | undefined;
   getRecipe: (id: string) => Recipe | undefined;
   addClip: (projectId: string, clip: Clip) => void;
   updateProjectStatus: (projectId: string, status: ProjectStatus, outputUrl?: string) => void;
   deleteProject: (projectId: string) => void;
+  getAllRecipes: () => Recipe[];
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -24,33 +27,42 @@ export const useProjects = () => {
 
 export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [customRecipes, setCustomRecipes] = useState<Recipe[]>([]);
 
-  // Load from local storage mock on mount
+  // Load from local storage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('grimwire_projects');
-    if (saved) {
+    const savedProjects = localStorage.getItem('grimwire_projects');
+    const savedRecipes = localStorage.getItem('grimwire_custom_recipes');
+    
+    if (savedProjects) {
       try {
-        const parsed = JSON.parse(saved);
-        // Note: Blob URLs won't persist across refreshes in a real app without IndexedDB or re-fetching.
-        // For this demo, we accept that refresh clears media but keeps metadata.
-        setProjects(parsed);
+        setProjects(JSON.parse(savedProjects));
       } catch (e) {
         console.error("Failed to load projects", e);
+      }
+    }
+
+    if (savedRecipes) {
+      try {
+        setCustomRecipes(JSON.parse(savedRecipes));
+      } catch (e) {
+        console.error("Failed to load recipes", e);
       }
     }
   }, []);
 
   // Save to local storage on change
   useEffect(() => {
-    // We strip out the large blobs for local storage text limit reasons in a real scenario,
-    // but for this simplified demo we just try to save what we can or mock it.
-    // Ideally we wouldn't store blobs in LS.
     const projectsToSave = projects.map(p => ({
       ...p,
-      clips: {} // Don't persist blobs to LS to avoid quota errors in this demo
+      clips: {} // Don't persist blobs to LS
     }));
     localStorage.setItem('grimwire_projects', JSON.stringify(projectsToSave));
   }, [projects]);
+
+  useEffect(() => {
+    localStorage.setItem('grimwire_custom_recipes', JSON.stringify(customRecipes));
+  }, [customRecipes]);
 
   const createProject = (recipeId: string, title: string) => {
     const newProject: Project = {
@@ -65,9 +77,17 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     return newProject.id;
   };
 
+  const saveCustomRecipe = (recipe: Recipe) => {
+    setCustomRecipes(prev => [...prev, recipe]);
+  };
+
   const getProject = (id: string) => projects.find(p => p.id === id);
   
-  const getRecipe = (id: string) => MASTER_RECIPES.find(r => r.id === id);
+  const getRecipe = (id: string) => {
+    return MASTER_RECIPES.find(r => r.id === id) || customRecipes.find(r => r.id === id);
+  };
+
+  const getAllRecipes = () => [...customRecipes, ...MASTER_RECIPES];
 
   const addClip = (projectId: string, clip: Clip) => {
     setProjects(prev => prev.map(p => {
@@ -95,7 +115,18 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   return (
-    <ProjectContext.Provider value={{ projects, createProject, getProject, getRecipe, addClip, updateProjectStatus, deleteProject }}>
+    <ProjectContext.Provider value={{ 
+      projects, 
+      customRecipes, 
+      createProject, 
+      saveCustomRecipe, 
+      getProject, 
+      getRecipe, 
+      addClip, 
+      updateProjectStatus, 
+      deleteProject,
+      getAllRecipes
+    }}>
       {children}
     </ProjectContext.Provider>
   );

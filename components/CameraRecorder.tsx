@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Camera, StopCircle, RefreshCw, CheckCircle, VideoOff, Mic } from 'lucide-react';
+import { Camera, StopCircle, RefreshCw, CheckCircle, VideoOff, Mic, Captions } from 'lucide-react';
+import { LiveTranscriber } from '../services/geminiService';
 
 interface CameraRecorderProps {
-  onCapture: (blob: Blob) => void;
+  onCapture: (blob: Blob, transcript: string) => void;
   aspectRatio: '9:16' | '16:9';
   isActive: boolean;
 }
@@ -16,8 +17,14 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [liveTranscript, setLiveTranscript] = useState('');
 
   const chunksRef = useRef<Blob[]>([]);
+  
+  // Real-time Transcription Refs
+  const transcriberRef = useRef<LiveTranscriber | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
 
   // Start Camera
   const startCamera = useCallback(async () => {
@@ -62,13 +69,63 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
     }
     return () => {
       if (stream) stream.getTracks().forEach(track => track.stop());
+      stopTranscription();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive]); // removed startCamera from deps to avoid loop
+  }, [isActive]); 
+
+  const startTranscription = async (mediaStream: MediaStream) => {
+    try {
+      const transcriber = new LiveTranscriber();
+      transcriberRef.current = transcriber;
+      setLiveTranscript('');
+
+      await transcriber.connect((text) => {
+        setLiveTranscript(prev => prev + text);
+      });
+
+      // Setup Audio Context for 16kHz sampling
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioContextClass({ sampleRate: 16000 });
+      audioContextRef.current = ctx;
+
+      const source = ctx.createMediaStreamSource(mediaStream);
+      // Buffer size 4096, 1 input channel, 1 output channel
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        transcriber.sendAudio(inputData);
+      };
+
+      source.connect(processor);
+      processor.connect(ctx.destination); // Mute loopback if needed, but script processor needs destination to fire
+
+    } catch (err) {
+      console.error("Failed to start transcription", err);
+    }
+  };
+
+  const stopTranscription = () => {
+    if (transcriberRef.current) {
+      transcriberRef.current.close();
+      transcriberRef.current = null;
+    }
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+  };
 
   const handleStartRecording = () => {
     if (!stream) return;
     
+    // Start Video Recording
     chunksRef.current = [];
     const recorder = new MediaRecorder(stream);
     
@@ -84,11 +141,15 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
       setPreviewUrl(URL.createObjectURL(blob));
       setIsRecording(false);
       setRecordingTime(0);
+      stopTranscription();
     };
 
     recorder.start();
     setIsRecording(true);
     mediaRecorderRef.current = recorder;
+
+    // Start Live Transcription
+    startTranscription(stream);
   };
 
   const handleStopRecording = () => {
@@ -112,12 +173,13 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setRecordedBlob(null);
     setPreviewUrl(null);
+    setLiveTranscript('');
     startCamera();
   };
 
   const handleAccept = () => {
     if (recordedBlob) {
-      onCapture(recordedBlob);
+      onCapture(recordedBlob, liveTranscript);
     }
   };
 
@@ -162,6 +224,22 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
           playsInline 
           muted 
         />
+      )}
+
+      {/* Real-time Transcription Overlay */}
+      {(isRecording || previewUrl) && liveTranscript && (
+        <div className="absolute bottom-24 left-4 right-4 pointer-events-none">
+          <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 animate-in slide-in-from-bottom-5">
+             <div className="flex items-center gap-2 mb-1">
+               <Captions className="w-3 h-3 text-amber-500" />
+               <span className="text-[10px] uppercase font-bold text-zinc-400">Live Transcription</span>
+             </div>
+             <p className="text-white font-medium text-lg leading-snug drop-shadow-md">
+               {liveTranscript}
+               {isRecording && <span className="inline-block w-1.5 h-4 ml-1 bg-amber-500 animate-pulse align-middle" />}
+             </p>
+          </div>
+        </div>
       )}
 
       {/* Overlays */}

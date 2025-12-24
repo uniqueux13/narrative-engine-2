@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjects } from '../services/projectContext';
-import { MASTER_RECIPES } from '../constants';
-import { Plus, Play, Clock, Film, Loader2, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Plus, Clock, Film, ChevronRight, CheckCircle2, FlaskConical, LayoutTemplate } from 'lucide-react';
 import { ProjectStatus } from '../types';
 
 const Dashboard: React.FC = () => {
-  const { projects, createProject } = useProjects();
+  const { projects, createProject, getAllRecipes } = useProjects();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(MASTER_RECIPES[0].id);
+  
+  const allRecipes = getAllRecipes();
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(allRecipes[0]?.id || null);
   const [projectTitle, setProjectTitle] = useState('');
 
   const handleCreate = () => {
@@ -40,13 +41,22 @@ const Dashboard: React.FC = () => {
             Build inside-out.
           </p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-amber-900/20"
-        >
-          <Plus className="w-5 h-5" />
-          Initialize Project
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => navigate('/builder')}
+            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-6 py-3 rounded-xl font-bold transition-all border border-zinc-700"
+          >
+            <FlaskConical className="w-5 h-5" />
+            New Recipe
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-zinc-950 px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-amber-900/20"
+          >
+            <Plus className="w-5 h-5" />
+            Initialize Project
+          </button>
+        </div>
       </div>
 
       {/* Projects Grid */}
@@ -96,13 +106,13 @@ const Dashboard: React.FC = () => {
       {/* New Project Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 relative overflow-hidden">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 relative overflow-hidden flex flex-col max-h-[90vh]">
              {/* Decorative Background */}
              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-purple-600"></div>
 
              <h2 className="text-2xl font-bold text-white mb-6">Initialize New Project</h2>
              
-             <div className="space-y-4">
+             <div className="space-y-4 flex-1 overflow-y-auto">
                <div>
                  <label className="block text-sm font-medium text-zinc-400 mb-1">Project Codename</label>
                  <input 
@@ -116,8 +126,22 @@ const Dashboard: React.FC = () => {
 
                <div>
                  <label className="block text-sm font-medium text-zinc-400 mb-3">Select Recipe</label>
-                 <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                   {MASTER_RECIPES.map(recipe => (
+                 <div className="space-y-2">
+                   {/* Create New Link */}
+                   <button 
+                     onClick={() => navigate('/builder')}
+                     className="w-full p-4 rounded-lg border border-dashed border-zinc-700 hover:border-amber-500 hover:bg-zinc-900/50 text-left transition-all flex items-center gap-3 group"
+                   >
+                     <div className="p-2 bg-zinc-800 rounded group-hover:bg-amber-500/20 text-zinc-400 group-hover:text-amber-500 transition-colors">
+                       <LayoutTemplate className="w-5 h-5" />
+                     </div>
+                     <div>
+                       <span className="font-bold text-zinc-300 group-hover:text-white">Design New Recipe</span>
+                       <p className="text-xs text-zinc-500">Construct a custom structural template.</p>
+                     </div>
+                   </button>
+
+                   {allRecipes.map(recipe => (
                      <div 
                        key={recipe.id}
                        onClick={() => setSelectedRecipeId(recipe.id)}
@@ -143,7 +167,7 @@ const Dashboard: React.FC = () => {
                </div>
              </div>
 
-             <div className="mt-8 flex gap-3">
+             <div className="mt-6 pt-4 border-t border-zinc-800 flex gap-3 flex-shrink-0">
                <button 
                  onClick={() => setIsModalOpen(false)}
                  className="flex-1 px-4 py-3 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-900 transition-colors font-medium"
