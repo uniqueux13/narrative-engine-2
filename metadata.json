@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Grimwire Narrative Engine",
+  "description": "A structured video creation interface that guides users through narrative recipes, leveraging the Gemini API for script assistance and a simulated cloud rendering pipeline.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
