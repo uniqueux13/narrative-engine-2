@@ -4,7 +4,7 @@ import { useProjects } from '../services/projectContext';
 import { generateScriptForSlot } from '../services/geminiService';
 import { manifestProject } from '../services/mockForge';
 import CameraRecorder from '../components/CameraRecorder';
-import { ChevronLeft, BrainCircuit, Wand2, ChevronRight, PlayCircle, Loader, ArrowRight, Download, Check, RotateCcw, Captions } from 'lucide-react';
+import { ChevronLeft, BrainCircuit, Wand2, ChevronRight, PlayCircle, Loader, ArrowRight, Download, Check, RotateCcw, Captions, Edit3, Save } from 'lucide-react';
 import { ProjectStatus } from '../types';
 
 const Studio: React.FC = () => {
@@ -20,6 +20,9 @@ const Studio: React.FC = () => {
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [showManifestSuccess, setShowManifestSuccess] = useState(false);
   
+  // Transcript Editing
+  const [localTranscript, setLocalTranscript] = useState('');
+  
   // Playback state for the final result
   const [playbackIndex, setPlaybackIndex] = useState(0);
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
@@ -30,10 +33,15 @@ const Studio: React.FC = () => {
     }
   }, [project, navigate]);
 
-  // Reset AI script when changing slots
+  // Reset AI script and sync transcript when changing slots
   useEffect(() => {
     setAiScript(null);
-  }, [currentSlotIndex]);
+    if (project && recipe) {
+        const slot = recipe.slots[currentSlotIndex];
+        const clip = project.clips[slot.id];
+        setLocalTranscript(clip?.transcript || '');
+    }
+  }, [currentSlotIndex, project?.clips]);
 
   // Autoplay sequence logic for the result view
   useEffect(() => {
@@ -59,6 +67,18 @@ const Studio: React.FC = () => {
       clip: project.clips[slot.id]
     }));
 
+  const saveTranscript = () => {
+     if (project && project.clips[currentSlot.id]) {
+         const currentClip = project.clips[currentSlot.id];
+         if (currentClip.transcript !== localTranscript) {
+             addClip(project.id, {
+                 ...currentClip,
+                 transcript: localTranscript
+             });
+         }
+     }
+  };
+
   const handleCapture = (blob: Blob, transcript: string) => {
     addClip(project.id, {
       slotId: currentSlot.id,
@@ -67,15 +87,18 @@ const Studio: React.FC = () => {
       timestamp: Date.now(),
       transcript
     });
+    setLocalTranscript(transcript);
   };
 
   const handleNext = () => {
+    saveTranscript();
     if (currentSlotIndex < recipe.slots.length - 1) {
       setCurrentSlotIndex(prev => prev + 1);
     }
   };
 
   const handlePrev = () => {
+    saveTranscript();
     if (currentSlotIndex > 0) {
       setCurrentSlotIndex(prev => prev - 1);
     }
@@ -89,6 +112,7 @@ const Studio: React.FC = () => {
   };
 
   const handleManifest = async () => {
+    saveTranscript();
     if (!projectId) return;
     // Pass the actual clips to the forge
     await manifestProject(projectId, project.clips, (status, url) => {
@@ -242,7 +266,10 @@ const Studio: React.FC = () => {
             return (
               <button 
                 key={slot.id}
-                onClick={() => setCurrentSlotIndex(idx)}
+                onClick={() => {
+                    saveTranscript();
+                    setCurrentSlotIndex(idx);
+                }}
                 className={`flex-shrink-0 md:w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
                   isActive 
                     ? 'bg-zinc-800 border-amber-500 ring-1 ring-amber-500/20' 
@@ -289,57 +316,61 @@ const Studio: React.FC = () => {
       {/* Main Studio Area */}
       <div className="flex-1 flex flex-col bg-zinc-950 md:bg-zinc-900/50 md:rounded-3xl md:border border-zinc-800 overflow-hidden relative">
         
-        {/* Slot Info Overlay */}
-        <div className="absolute top-0 left-0 right-0 z-10 p-6 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-          <div className="flex justify-between items-start pointer-events-auto">
-             <div>
-               <div className="flex items-center gap-3">
-                 <h3 className="text-2xl font-bold text-white drop-shadow-md">{currentSlot.name}</h3>
-                 {currentSlot.hasSubtitles && (
-                   <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-amber-500 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md">
-                     Subtitles On
-                   </span>
-                 )}
+        {/* Slot Info Overlay - Only show if NO clip is recorded yet, or if reviewing and not editing */}
+        {!clip && (
+          <div className="absolute top-0 left-0 right-0 z-10 p-6 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+            <div className="flex justify-between items-start pointer-events-auto">
+               <div>
+                 <div className="flex items-center gap-3">
+                   <h3 className="text-2xl font-bold text-white drop-shadow-md">{currentSlot.name}</h3>
+                   {currentSlot.hasSubtitles && (
+                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-amber-500 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md">
+                       Subtitles On
+                     </span>
+                   )}
+                 </div>
+                 <p className="text-zinc-300 text-sm max-w-md drop-shadow-md mt-1">{currentSlot.description}</p>
                </div>
-               <p className="text-zinc-300 text-sm max-w-md drop-shadow-md mt-1">{currentSlot.description}</p>
-             </div>
-             
-             {/* AI Script Assistant */}
-             <div className="flex flex-col items-end gap-2">
-               <button 
-                 onClick={handleGenerateScript}
-                 disabled={isGeneratingScript}
-                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/50 rounded-full backdrop-blur-md text-xs font-bold text-indigo-300 transition-colors"
-               >
-                 <BrainCircuit className="w-3 h-3" />
-                 {isGeneratingScript ? 'Thinking...' : 'AI Script'}
-               </button>
-             </div>
-          </div>
-
-          {/* AI Script Result Display */}
-          {aiScript && (
-            <div className="mt-4 p-4 bg-black/60 backdrop-blur-xl border-l-2 border-indigo-500 rounded-r-lg max-w-sm pointer-events-auto animate-in fade-in slide-in-from-top-2">
-              <p className="text-white text-lg font-medium leading-snug">"{aiScript}"</p>
-              <button onClick={() => setAiScript(null)} className="text-xs text-zinc-500 mt-2 hover:text-white">Dismiss</button>
+               
+               {/* AI Script Assistant */}
+               <div className="flex flex-col items-end gap-2">
+                 <button 
+                   onClick={handleGenerateScript}
+                   disabled={isGeneratingScript}
+                   className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/50 rounded-full backdrop-blur-md text-xs font-bold text-indigo-300 transition-colors"
+                 >
+                   <BrainCircuit className="w-3 h-3" />
+                   {isGeneratingScript ? 'Thinking...' : 'AI Script'}
+                 </button>
+               </div>
             </div>
-          )}
-        </div>
+
+            {/* AI Script Result Display */}
+            {aiScript && (
+              <div className="mt-4 p-4 bg-black/60 backdrop-blur-xl border-l-2 border-indigo-500 rounded-r-lg max-w-sm pointer-events-auto animate-in fade-in slide-in-from-top-2">
+                <p className="text-white text-lg font-medium leading-snug">"{aiScript}"</p>
+                <button onClick={() => setAiScript(null)} className="text-xs text-zinc-500 mt-2 hover:text-white">Dismiss</button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Camera / Preview Area */}
-        <div className="flex-1 relative bg-black">
+        <div className={`flex-1 relative bg-black ${clip && currentSlot.hasSubtitles ? 'basis-3/5' : ''}`}>
           {clip ? (
-            <div className="relative w-full h-full">
+            <div className="relative w-full h-full group">
               <video 
                 src={clip.blobUrl} 
                 controls 
                 className="w-full h-full object-contain"
               />
+              {/* Retake button moved to top right during review */}
               <button 
-                onClick={() => addClip(project.id, { ...clip, slotId: 'temp_remove' } as any)} // Hack to remove for UI demo
-                className="absolute bottom-20 left-1/2 -translate-x-1/2 px-6 py-2 bg-zinc-800/80 backdrop-blur text-white rounded-full text-sm font-bold border border-white/10"
+                onClick={() => addClip(project.id, { ...clip, slotId: 'temp_remove' } as any)} 
+                className="absolute top-4 right-4 px-4 py-2 bg-zinc-800/80 backdrop-blur text-white rounded-lg text-xs font-bold border border-white/10 hover:bg-zinc-700 transition-colors shadow-lg z-20 flex items-center gap-2"
               >
-                Retake Slot
+                <RotateCcw className="w-3 h-3" />
+                Retake
               </button>
             </div>
           ) : (
@@ -350,6 +381,34 @@ const Studio: React.FC = () => {
             />
           )}
         </div>
+
+        {/* Transcript Editor - Only visible if clip exists and slot has subtitles */}
+        {clip && currentSlot.hasSubtitles && (
+            <div className="flex-shrink-0 p-6 bg-zinc-950/80 border-t border-zinc-800 h-1/3 flex flex-col">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-amber-500">
+                        <Captions className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-wider">Subtitle Transcript</span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">Auto-generated via Gemini Live</span>
+                </div>
+                <div className="flex-1 relative">
+                    <textarea 
+                        value={localTranscript}
+                        onChange={(e) => setLocalTranscript(e.target.value)}
+                        onBlur={saveTranscript}
+                        className="w-full h-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-zinc-200 text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 resize-none font-medium leading-relaxed"
+                        placeholder="Waiting for transcript..."
+                    />
+                    <div className="absolute bottom-3 right-3 pointer-events-none">
+                         <Edit3 className="w-3 h-3 text-zinc-600" />
+                    </div>
+                </div>
+                <p className="text-[10px] text-zinc-600 mt-2 text-center">
+                    Edits are saved automatically when you navigate.
+                </p>
+            </div>
+        )}
 
         {/* Mobile Bottom Navigation */}
         <div className="md:hidden p-4 bg-zinc-950 border-t border-zinc-800 flex justify-between items-center gap-4">
