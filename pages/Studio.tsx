@@ -379,30 +379,36 @@ const Studio: React.FC = () => {
         )}
 
         {/* Camera / Preview Area */}
-        <div className={`flex-1 relative bg-black ${clip && currentSlot.hasSubtitles ? 'basis-3/5' : ''}`}>
-          {clip ? (
-            <div className="relative w-full h-full group">
-              <video 
-                src={clip.blobUrl} 
-                controls 
-                className="w-full h-full object-contain"
-              />
-              {/* Retake button moved to top right during review */}
-              <button 
-                onClick={() => addClip(project.id, { ...clip, slotId: 'temp_remove' } as any)} 
-                className="absolute top-4 right-4 px-4 py-2 bg-zinc-800/80 backdrop-blur text-white rounded-lg text-xs font-bold border border-white/10 hover:bg-zinc-700 transition-colors shadow-lg z-20 flex items-center gap-2"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Retake
-              </button>
-            </div>
-          ) : (
-            <CameraRecorder 
-              isActive={true}
-              aspectRatio={currentSlot.requiredAspectRatio || '9:16'}
-              onCapture={handleCapture}
-            />
-          )}
+        <div className={`flex-1 relative bg-black flex items-center justify-center overflow-hidden ${clip && currentSlot.hasSubtitles ? 'basis-3/5' : ''}`}>
+           {/* Aspect Ratio Constraint Container */}
+           <div className={`relative w-full h-full max-w-[500px] ${
+             currentSlot.requiredAspectRatio === '16:9' 
+               ? 'aspect-video w-full max-h-full h-auto' 
+               : 'aspect-[9/16] h-full w-auto max-w-full'
+           }`}>
+             {clip ? (
+               <div className="relative w-full h-full group">
+                 <video 
+                   src={clip.blobUrl} 
+                   controls 
+                   className="w-full h-full object-cover rounded-none md:rounded-2xl"
+                 />
+                 <button 
+                   onClick={() => addClip(project.id, { ...clip, slotId: 'temp_remove' } as any)} 
+                   className="absolute top-4 right-4 px-4 py-2 bg-zinc-800/80 backdrop-blur text-white rounded-lg text-xs font-bold border border-white/10 hover:bg-zinc-700 transition-colors shadow-lg z-20 flex items-center gap-2"
+                 >
+                   <RotateCcw className="w-3 h-3" />
+                   Retake
+                 </button>
+               </div>
+             ) : (
+               <CameraRecorder 
+                 isActive={true}
+                 aspectRatio={currentSlot.requiredAspectRatio || '9:16'}
+                 onCapture={handleCapture}
+               />
+             )}
+           </div>
         </div>
 
         {/* Transcript Editor - Only visible if clip exists and slot has subtitles */}

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Camera, StopCircle, RefreshCw, CheckCircle, VideoOff, Mic, Captions } from 'lucide-react';
+import { RefreshCw, CheckCircle, VideoOff, Captions } from 'lucide-react';
 import { LiveTranscriber } from '../services/geminiService';
 
 interface CameraRecorderProps {
@@ -33,14 +33,23 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
         stream.getTracks().forEach(track => track.stop());
       }
       
-      // Constraints for mobile-first vertical video usually
+      const isPortrait = aspectRatio === '9:16';
+
+      // Enhanced constraints for mobile/desktop compatibility
       const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: 'user', // Default to selfie mode for vlog style
-          aspectRatio: aspectRatio === '9:16' ? 9/16 : 16/9,
-          height: { ideal: 1080 } 
+          facingMode: 'user', 
+          // Prefer strict dimensions to force quality/orientation where possible
+          // On mobile, browser usually handles orientation, but we request 
+          // 720p minimum.
+          width: { ideal: isPortrait ? 720 : 1280 },
+          height: { ideal: isPortrait ? 1280 : 720 },
+          // frameRate: { ideal: 30 }
         },
-        audio: true
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true
+        }
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -206,7 +215,7 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
   }
 
   return (
-    <div className="relative h-full w-full bg-black rounded-3xl overflow-hidden shadow-2xl ring-1 ring-zinc-800">
+    <div className="relative h-full w-full bg-black rounded-3xl overflow-hidden shadow-2xl ring-1 ring-zinc-800 isolate">
       {/* Viewfinder / Preview */}
       {previewUrl ? (
         <video 
@@ -228,7 +237,7 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
 
       {/* Real-time Transcription Overlay */}
       {(isRecording || previewUrl) && liveTranscript && (
-        <div className="absolute bottom-24 left-4 right-4 pointer-events-none">
+        <div className="absolute bottom-24 left-4 right-4 pointer-events-none z-20">
           <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 animate-in slide-in-from-bottom-5">
              <div className="flex items-center gap-2 mb-1">
                <Captions className="w-3 h-3 text-amber-500" />
@@ -243,7 +252,7 @@ const CameraRecorder: React.FC<CameraRecorderProps> = ({ onCapture, aspectRatio,
       )}
 
       {/* Overlays */}
-      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6">
+      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
         {/* Top Status */}
         <div className="flex justify-between items-start">
           <div className="bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-xs font-mono text-white/80 border border-white/10 flex items-center gap-2">
